@@ -3,180 +3,351 @@
  * Licensed under the MIT License.
  */
 
-import {
-    Actor,
-    AnimationKeyframe,
-    AnimationWrapMode,
-    ButtonBehavior,
-    Context,
-    Quaternion,
-    TextAnchorLocation,
-    Vector3
-} from '@microsoft/mixed-reality-extension-sdk';
+import * as MRE from '@microsoft/mixed-reality-extension-sdk';
+import { PrimitiveShape, ActorTransform, Sound, Light, LookAtMode, RigidBody }
+	from '@microsoft/mixed-reality-extension-sdk';
+import { Vector3 } from '@microsoft/mixed-reality-extension-sdk';
+
+/**
+ * The structure of a hat entry in the hat database.
+ */
+type HatDescriptor = {
+	displayName: string;
+	resourceName: string;
+	scale: {
+		x: number;
+		y: number;
+		z: number;
+	};
+	rotation: {
+		x: number;
+		y: number;
+		z: number;
+	};
+	position: {
+		x: number;
+		y: number;
+		z: number;
+	};
+};
+
+/**
+ * The structure of the hat database.
+ */
+type HatDatabase = {
+	[key: string]: HatDescriptor;
+};
+
+// Load the database of hats.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const HatDatabase: HatDatabase = require('../public/hats.json');
 
 /**
  * The main class of this app. All the logic goes here.
  */
-export default class HelloWorld {
-    private text: Actor = null;
-    private cube: Actor = null;
+export default class TicTacToe {
+	private assets: MRE.AssetContainer;
+	private hatAssets: MRE.AssetContainer;
+	private lastSaved: MRE.Actor = null;
+	private selectedCube: MRE.Actor = null
+	private prefabs: { [key: string]: MRE.Prefab } = {};
+	private attachedHats = new Map<MRE.Guid, MRE.Actor>();;
+	private grabFlag = false;
+	private handtrackers: { [key: string]: MRE.Actor };
 
-    constructor(private context: Context, private baseUrl: string) {
-        this.context.onStarted(() => this.started());
-    }
+	constructor(private context: MRE.Context) {
+		this.context.onStarted(() => this.started());
+	}
 
-    /**
-     * Once the context is "started", initialize the app.
-     */
-    private started() {
+	/**
+	 * Once the context is "started", initialize the app.
+	 */
+	private async started() {
+		// set up somewhere to store loaded assets (meshes, textures, animations, gltfs, etc.)
+		this.assets = new MRE.AssetContainer(this.context);
+		this.hatAssets = new MRE.AssetContainer(this.context);
 
-        // Create a new actor with no mesh, but some text. This operation is asynchronous, so
-        // it returns a "forward" promise (a special promise, as we'll see later).
-        const textPromise = Actor.CreateEmpty(this.context, {
-            actor: {
-                name: 'Text',
-                transform: {
-                    position: { x: 0, y: 0.5, z: 0 }
-                },
-                text: {
-                    contents: "Tom's da Man!",
-                    anchor: TextAnchorLocation.MiddleCenter,
-                    color: { r: 30 / 255, g: 206 / 255, b: 213 / 255 },
-                    height: 0.3
-                }
-            }
-        });
+		// await this.startedImpl();
 
-        // Even though the actor is not yet created in Altspace (because we didn't wait for the promise),
-        // we can still get a reference to it by grabbing the `value` field from the forward promise.
-        this.text = textPromise.value;
+		// Load a glTF model before we use it
+		const cubeData = await this.assets.loadGltf('altspace-cube.glb', "box");
 
-        // Here we create an animation on our text actor. Animations have three mandatory arguments:
-        // a name, an array of keyframes, and an array of events.
-        this.text.createAnimation({
-            // The name is a unique identifier for this animation. We'll pass it to "startAnimation" later.
-            animationName: "Spin",
-            // Keyframes define the timeline for the animation: where the actor should be, and when.
-            // We're calling the generateSpinKeyframes function to produce a simple 20-second revolution.
-            keyframes: this.generateSpinKeyframes(20, Vector3.Up()),
-            // Events are points of interest during the animation. The animating actor will emit a given
-            // named event at the given timestamp with a given string value as an argument.
-            events: [],
+		let cubeCounter = 1;
+		const horizontalDim = 7
+		const verticalDim = 7
+		for (let tileIndexX = 0; tileIndexX < horizontalDim; tileIndexX++) {
+			for (let tileIndexY = 0; tileIndexY < verticalDim; tileIndexY++) {
 
-            // Optionally, we also repeat the animation infinitely.
-            wrapMode: AnimationWrapMode.Loop
-        })
-            .catch(reason => this.context.logger.log('error', `Failed to create spin animation: ${reason}`));
+				// spawn a copy of the glTF model
+				const cube = MRE.Actor.CreateFromPrefab(this.context, {
+					// using the data we loaded earlier
+					firstPrefabFrom: cubeData,
+					// Also apply the following generic actor properties.
+					actor: {
+						name: 'Altspace Cube',
+						collider: {
+							geometry: { shape: MRE.ColliderType.Box }
+						},
+						transform: {
+							local: {
+								position: { x: tileIndexX, y: tileIndexY, z: 0 },
+								scale: { x: 0.4, y: 0.4, z: 0.4 }
+							}
+						}
+					}
+				});
 
-        // Load a glTF model
-        const cubePromise = Actor.CreateFromGLTF(this.context, {
-            // at the given URL
-            resourceUrl: `${this.baseUrl}/altspace-cube.glb`,
-            // and spawn box colliders around the meshes.
-            colliderType: 'box',
-            // Also apply the following generic actor properties.
-            actor: {
-                name: 'Altspace Cube',
-                // Parent the glTF model to the text actor.
-                parentId: this.text.id,
-                transform: {
-                    position: { x: 0, y: -1, z: 0 },
-                    scale: { x: 0.4, y: 0.4, z: 0.4 }
-                }
-            }
-        });
+				// Create a new actor with no mesh, but some text.
+				const text = MRE.Actor.Create(this.context, {
+					actor: {
+						parentId: cube.id,
+						name: 'Text',
+						transform: {
+							app: { position: { x: tileIndexX, y: tileIndexY, z: -0.6 } }
+						},
+						text: {
+							contents: "" + cubeCounter,
+							anchor: MRE.TextAnchorLocation.MiddleCenter,
+							color: { r: 30 / 255, g: 206 / 255, b: 213 / 255 },
+							height: 2
+						}
+					}
+				});
 
-        // Grab that early reference again.
-        this.cube = cubePromise.value;
+				// Set up cursor interaction. We add the input behavior ButtonBehavior to the cube.
+				// Button behaviors have two pairs of events: hover start/stop, and click start/stop.
+				const buttonBehavior = cube.setBehavior(MRE.ButtonBehavior);
 
-        // Create some animations on the cube.
-        this.cube.createAnimation({
-            animationName: 'GrowIn',
-            keyframes: this.growAnimationData,
-            events: []
-        })
-            .catch(reason => this.context.logger.log('error', `Failed to create grow animation: ${reason}`));
+				// Trigger the grow/shrink animations on hover.
+				buttonBehavior.onHover('enter', () => {
+					// use the convenience function "AnimateTo" instead of creating the animation data in advance
+					MRE.Animation.AnimateTo(this.context, cube, {
+						destination: { transform: { local: { scale: { x: 0.5, y: 0.5, z: 0.5 } } } },
+						duration: 0.3,
+						easing: MRE.AnimationEaseCurves.EaseOutSine
+					});
+				});
+				buttonBehavior.onHover('exit', () => {
+					if (this.selectedCube !== cube) {
+						MRE.Animation.AnimateTo(this.context, cube, {
+							destination: { transform: { local: { scale: { x: 0.4, y: 0.4, z: 0.4 } } } },
+							duration: 0.3,
+							easing: MRE.AnimationEaseCurves.EaseOutSine
+						});
+					} 
+				});
 
-        this.cube.createAnimation({
-            animationName: 'ShrinkOut',
-            keyframes: this.shrinkAnimationData,
-            events: []
-        })
-            .catch(reason => this.context.logger.log('error', `Failed to create shrink animation: ${reason}`));
+				// When clicked, do a 360 sideways.
+				buttonBehavior.onButton('pressed', () => {
+					if (this.selectedCube === null) {
+						this.selectedCube = cube
+					} else {
+						this.animateSwap(this.selectedCube, cube)
+						this.selectedCube = null;
+					}
+				});
 
-        this.cube.createAnimation({
-            animationName: 'DoAFlip',
-            keyframes: this.generateSpinKeyframes(1.0, Vector3.Right()),
-            events: []
-        })
-            .catch(reason => this.context.logger.log('error', `Failed to create flip animation: ${reason}`));
+				cubeCounter++;
+			}
+		}
 
-        // Now that the text and its animation are all being set up, we can start playing
-        // the animation.
-        this.text.startAnimation('Spin');
+		// Create menu button
+		const buttonMesh = this.assets.createBoxMesh('button', 0.3, 0.3, 0.01);
 
-        // Set up cursor interaction. We add the input behavior ButtonBehavior to the cube.
-        // Button behaviors have two pairs of events: hover start/stop, and click start/stop.
-        const buttonBehavior = this.cube.setBehavior(ButtonBehavior);
+		// Create a clickable button.
+		const gravButton = MRE.Actor.Create(this.context, {
+			actor: {
+				name: "grav",
+				appearance: { meshId: buttonMesh.id },
+				collider: { geometry: { shape: MRE.ColliderType.Auto } },
+				transform: {
+					local: { position: { x: -1, y: 3, z: 0 } }
+				}
+			}
+		});
 
-        // Trigger the grow/shrink animations on hover.
-        buttonBehavior.onHover('enter', (userId: string) => {
-            this.cube.startAnimation('GrowIn');
-        }
-        );
-        buttonBehavior.onHover('exit', (userId: string) => {
-            this.cube.startAnimation('ShrinkOut');
-        }
-        );
+		gravButton.enableRigidBody(new RigidBody(gravButton));
+		gravButton.rigidBody.enabled = true
+		gravButton.rigidBody.mass = 0.5
+		gravButton.rigidBody.useGravity = true
 
-        // When clicked, do a 360 sideways.
-        buttonBehavior.onClick('pressed', (userId: string) => {
-            this.cube.startAnimation('DoAFlip');
-        }
-        );
+		gravButton.setCollider(MRE.ColliderType.Auto, false)
 
-    }
+		gravButton.grabbable = true
 
-    /**
-     * Generate keyframe data for a simple spin animation.
-     * @param duration The length of time in seconds it takes to complete a full revolution.
-     * @param axis The axis of rotation in local space.
-     */
-    private generateSpinKeyframes(duration: number, axis: Vector3): AnimationKeyframe[] {
-        return [{
-            time: 0 * duration,
-            value: { transform: { rotation: Quaternion.RotationAxis(axis, 0) } }
-        }, {
-            time: 0.25 * duration,
-            value: { transform: { rotation: Quaternion.RotationAxis(axis, Math.PI / 2) } }
-        }, {
-            time: 0.5 * duration,
-            value: { transform: { rotation: Quaternion.RotationAxis(axis, Math.PI) } }
-        }, {
-            time: 0.75 * duration,
-            value: { transform: { rotation: Quaternion.RotationAxis(axis, 3 * Math.PI / 2) } }
-        }, {
-            time: 1 * duration,
-            value: { transform: { rotation: Quaternion.RotationAxis(axis, 2 * Math.PI) } }
-        }, {
-            time: 2 * duration,
-            value: { transform: { rotation: Quaternion.RotationAxis(axis, 2 * Math.PI) } }
-        }];
-    }
+		// Create a clickable button.
+		const grabButton = MRE.Actor.Create(this.context, {
+			actor: {
+				name: "grab",
+				appearance: { meshId: buttonMesh.id },
+				collider: { geometry: { shape: MRE.ColliderType.Auto } },
+				transform: {
+					local: { position: { x: -1, y: 1, z: 0 } }
+				}
+			}
+		});
 
-    private growAnimationData: AnimationKeyframe[] = [{
-        time: 0,
-        value: { transform: { scale: { x: 0.4, y: 0.4, z: 0.4 } } }
-    }, {
-        time: 0.3,
-        value: { transform: { scale: { x: 0.5, y: 0.5, z: 0.5 } } }
-    }];
+		grabButton.grabbable = true
 
-    private shrinkAnimationData: AnimationKeyframe[] = [{
-        time: 0,
-        value: { transform: { scale: { x: 0.5, y: 0.5, z: 0.5 } } }
-    }, {
-        time: 0.3,
-        value: { transform: { scale: { x: 0.4, y: 0.4, z: 0.4 } } }
-    }];
+		grabButton.onGrab("begin", user => {
+			console.log("grab begin")
+		})
+
+		grabButton.subscribe("transform")
+
+		// Create a clickable button.
+		const lookAtButton = MRE.Actor.Create(this.context, {
+			actor: {
+				name: "lookie",
+				appearance: { meshId: buttonMesh.id },
+				collider: { geometry: { shape: MRE.ColliderType.Auto } },
+				transform: {
+					local: { position: { x: -1, y: 2, z: 0 } }
+				}
+			}
+		});
+
+		lookAtButton.enableLookAt(grabButton, MRE.LookAtMode.TargetXY)
+
+		// Create a clickable button.
+		const button = MRE.Actor.Create(this.context, {
+			actor: {
+				name: "strawhat",
+				appearance: { meshId: buttonMesh.id },
+				collider: { geometry: { shape: MRE.ColliderType.Auto } },
+				transform: {
+					local: { position: { x: -1, y: 0, z: 0 } }
+				}
+			}
+		});
+
+		let behaviour: MRE.ButtonBehavior
+		behaviour = button.setBehavior(MRE.ButtonBehavior);
+		// Set a click handler on the button.
+		behaviour.onClick(user => {
+			console.log("button pressed");
+			// this.wearHat("strawhat", user.id)
+
+			let correctSound = new Sound(this.assets, {
+				id: user.id,
+				name: "correctSound",
+				sound: {
+					duration: 2,
+					uri: "Correct-answer.mp3"
+				}
+			});
+
+			this.assets.createSound("correct", correctSound)
+
+			console.log(button.light)
+			if (button.light === undefined) {
+
+				const testLight = new Light();
+				testLight.range = 3
+				testLight.color = {
+					r: 130,
+					g: 255,
+					b: 50,
+				};
+				testLight.type = "point"
+				testLight.spotAngle = 100
+				button.enableLight(testLight)
+				console.log(button.light)
+			} else {
+				button.light.enabled = !button.light.enabled
+			}
+		});
+
+		console.log(process.env.id)
+	}
+
+	private animateSwap(selected: MRE.Actor, swapTarget: MRE.Actor) {
+
+		let temp = new Vector3(
+			selected.transform.local.position.x,
+			selected.transform.local.position.y,
+			selected.transform.local.position.z
+		)
+
+		MRE.Animation.AnimateTo(this.context, selected, {
+			destination: { transform: { local: { position: swapTarget.transform.local.position } } },
+			duration: 0.3,
+			easing: MRE.AnimationEaseCurves.EaseOutSine
+		});
+
+		MRE.Animation.AnimateTo(this.context, swapTarget, {
+			destination: { transform: { local: { position: temp } } },
+			duration: 0.3,
+			easing: MRE.AnimationEaseCurves.EaseOutSine
+		});
+
+		selected.transform.local.position = swapTarget.transform.local.position
+		swapTarget.transform.local.position = temp
+	}
+
+	// use () => {} syntax here to get proper scope binding when called via setTimeout()
+	// if async is required, next line becomes private startedImpl = async () => {
+	private startedImpl = async () => {
+		// Preload all the hat models.
+		await this.preloadHats();
+	}
+
+	/**
+	 * Preload all hat resources. This makes instantiating them faster and more efficient.
+	 */
+	private preloadHats() {
+		// Loop over the hat database, preloading each hat resource.
+		// Return a promise of all the in-progress load promises. This
+		// allows the caller to wait until all hats are done preloading
+		// before continuing.
+		return Promise.all(
+			Object.keys(HatDatabase).map(hatId => {
+				const hatRecord = HatDatabase[hatId];
+				if (hatRecord.resourceName) {
+					return this.hatAssets.loadGltf(hatRecord.resourceName)
+						.then(assets => {
+							this.prefabs[hatId] = assets.find(a => a.prefab !== null) as MRE.Prefab;
+						})
+						.catch(e => MRE.log.error("app", e));
+				} else {
+					return Promise.resolve();
+				}
+			}));
+	}
+
+	/**
+	 * Instantiate a hat and attach it to the avatar's head.
+	 * @param hatId The id of the hat in the hat database.
+	 * @param userId The id of the user we will attach the hat to.
+	 */
+	private wearHat(hatId: string, userId: MRE.Guid) {
+
+		const hatRecord = HatDatabase[hatId];
+
+		// If the user selected 'none', then early out.
+		if (!hatRecord.resourceName) {
+			return;
+		}
+
+		// Create the hat model and attach it to the avatar's head.
+		this.attachedHats.set(userId, MRE.Actor.CreateFromPrefab(this.context, {
+			prefab: this.prefabs[hatId],
+			actor: {
+				transform: {
+					local: {
+						position: hatRecord.position,
+						rotation: MRE.Quaternion.FromEulerAngles(
+							hatRecord.rotation.x * MRE.DegreesToRadians,
+							hatRecord.rotation.y * MRE.DegreesToRadians,
+							hatRecord.rotation.z * MRE.DegreesToRadians),
+						scale: hatRecord.scale,
+					}
+				},
+				attachment: {
+					attachPoint: 'right-hand',
+					userId
+				}
+			}
+		}));
+	}
 }

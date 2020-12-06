@@ -1,3 +1,5 @@
+sdk-path-config.json
+
 # Logs
 logs
 *.log
@@ -67,3 +69,8 @@ built/
 app.zip
 
 .openode
+
+# git .orig files
+.orig
+
+*.tsbuildinfo
