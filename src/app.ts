@@ -97,23 +97,6 @@ export default class TicTacToe {
 					}
 				});
 
-				// Create a new actor with no mesh, but some text.
-				const text = MRE.Actor.Create(this.context, {
-					actor: {
-						parentId: cube.id,
-						name: 'Text',
-						transform: {
-							app: { position: { x: tileIndexX, y: tileIndexY, z: -0.6 } }
-						},
-						text: {
-							contents: "" + cubeCounter,
-							anchor: MRE.TextAnchorLocation.MiddleCenter,
-							color: { r: 30 / 255, g: 206 / 255, b: 213 / 255 },
-							height: 2
-						}
-					}
-				});
-
 				// Set up cursor interaction. We add the input behavior ButtonBehavior to the cube.
 				// Button behaviors have two pairs of events: hover start/stop, and click start/stop.
 				const buttonBehavior = cube.setBehavior(MRE.ButtonBehavior);
@@ -152,10 +135,37 @@ export default class TicTacToe {
 				cube.rigidBody.enabled = true
 				cube.rigidBody.mass = 0.5
 				cube.rigidBody.useGravity = true
-
+				cube.grabbable = true
 				cubeCounter++
 			}
 		}
+	}
+
+	/**
+	 * Creates numbering on the boxes 
+	 * @param tileIndexX x coord
+	 * @param tileIndexY y coord
+	 * @param cube the cube to attach number to
+	 * @param cubeCounter the number the text will show
+	 */
+	private createText(tileIndexX: number, tileIndexY: number, cube: MRE.Actor, cubeCounter: number) {
+
+		// Create a new actor with no mesh, but some text.
+		const text = MRE.Actor.Create(this.context, {
+			actor: {
+				parentId: cube.id,
+				name: 'Text',
+				transform: {
+					app: { position: { x: tileIndexX, y: tileIndexY, z: -0.6 } }
+				},
+				text: {
+					contents: "" + cubeCounter,
+					anchor: MRE.TextAnchorLocation.MiddleCenter,
+					color: { r: 30 / 255, g: 206 / 255, b: 213 / 255 },
+					height: 2
+				}
+			}
+		});
 	}
 
 	/**
