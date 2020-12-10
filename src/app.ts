@@ -147,9 +147,21 @@ export default class TicTacToe {
 					}
 				});
 
-				cubeCounter++;
+				// give boxes gravity and a rigid body
+				cube.enableRigidBody(new RigidBody(cube))
+				cube.rigidBody.enabled = true
+				cube.rigidBody.mass = 0.5
+				cube.rigidBody.useGravity = true
+
+				cubeCounter++
 			}
 		}
+	}
+
+	/**
+	 * Unused, stored code.
+	 */
+	private createButtons() {
 
 		// Create menu button
 		const buttonMesh = this.assets.createBoxMesh('button', 0.3, 0.3, 0.01);
@@ -257,8 +269,6 @@ export default class TicTacToe {
 				button.light.enabled = !button.light.enabled
 			}
 		});
-
-		console.log(process.env.id)
 	}
 
 	private animateSwap(selected: MRE.Actor, swapTarget: MRE.Actor) {
