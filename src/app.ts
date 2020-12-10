@@ -97,39 +97,6 @@ export default class TicTacToe {
 					}
 				});
 
-				// Set up cursor interaction. We add the input behavior ButtonBehavior to the cube.
-				// Button behaviors have two pairs of events: hover start/stop, and click start/stop.
-				const buttonBehavior = cube.setBehavior(MRE.ButtonBehavior);
-
-				// Trigger the grow/shrink animations on hover.
-				buttonBehavior.onHover('enter', () => {
-					// use the convenience function "AnimateTo" instead of creating the animation data in advance
-					MRE.Animation.AnimateTo(this.context, cube, {
-						destination: { transform: { local: { scale: { x: 0.5, y: 0.5, z: 0.5 } } } },
-						duration: 0.3,
-						easing: MRE.AnimationEaseCurves.EaseOutSine
-					});
-				});
-				buttonBehavior.onHover('exit', () => {
-					if (this.selectedCube !== cube) {
-						MRE.Animation.AnimateTo(this.context, cube, {
-							destination: { transform: { local: { scale: { x: 0.4, y: 0.4, z: 0.4 } } } },
-							duration: 0.3,
-							easing: MRE.AnimationEaseCurves.EaseOutSine
-						});
-					} 
-				});
-
-				// When clicked, do a 360 sideways.
-				buttonBehavior.onButton('pressed', () => {
-					if (this.selectedCube === null) {
-						this.selectedCube = cube
-					} else {
-						this.animateSwap(this.selectedCube, cube)
-						this.selectedCube = null;
-					}
-				});
-
 				// give boxes gravity and a rigid body
 				cube.enableRigidBody(new RigidBody(cube))
 				cube.rigidBody.enabled = true
@@ -164,6 +131,45 @@ export default class TicTacToe {
 					color: { r: 30 / 255, g: 206 / 255, b: 213 / 255 },
 					height: 2
 				}
+			}
+		});
+	}
+
+	/**
+	 * Give the given cube behavior
+	 * @param cube the cube to attach the behavior to
+	 */
+	private addBehavior(cube: MRE.Actor) {
+		// Set up cursor interaction. We add the input behavior ButtonBehavior to the cube.
+		// Button behaviors have two pairs of events: hover start/stop, and click start/stop.
+		const buttonBehavior = cube.setBehavior(MRE.ButtonBehavior);
+
+		// Trigger the grow/shrink animations on hover.
+		buttonBehavior.onHover('enter', () => {
+			// use the convenience function "AnimateTo" instead of creating the animation data in advance
+			MRE.Animation.AnimateTo(this.context, cube, {
+				destination: { transform: { local: { scale: { x: 0.5, y: 0.5, z: 0.5 } } } },
+				duration: 0.3,
+				easing: MRE.AnimationEaseCurves.EaseOutSine
+			});
+		});
+		buttonBehavior.onHover('exit', () => {
+			if (this.selectedCube !== cube) {
+				MRE.Animation.AnimateTo(this.context, cube, {
+					destination: { transform: { local: { scale: { x: 0.4, y: 0.4, z: 0.4 } } } },
+					duration: 0.3,
+					easing: MRE.AnimationEaseCurves.EaseOutSine
+				});
+			}
+		});
+
+		// When clicked, do a 360 sideways.
+		buttonBehavior.onButton('pressed', () => {
+			if (this.selectedCube === null) {
+				this.selectedCube = cube
+			} else {
+				this.animateSwap(this.selectedCube, cube)
+				this.selectedCube = null;
 			}
 		});
 	}
